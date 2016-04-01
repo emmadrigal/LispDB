@@ -1,66 +1,74 @@
 (defun isKeyAvaliable (privateKey Table)
 ;; Checks if a private key has already been used inside a table
-     (cond ((> (list-lenght Table) 0)   
-            (cond ((eq privateKey (cadar Table))
-                  (nil))
-            (t (isKeyAvaliable (cdr Table) ) )
+     (cond ((> (list-length Table) 0)   
+            (cond ((string-equal privateKey (cadar Table))
+                  nil)
+            (t (isKeyAvaliable privateKey (cdr Table) ) )
             ))
      (t t);;Table is empty, key is available
      )
 )
 
+(defun returnRecord (privateKey Table)
+;;Returns a specific record, existance of the record has already been proved
+      (cond ((string-equal privateKey (cadar Table))  (car Table));;Since the private key is unique, a match is the record being looked for
+            (t (returnRecord privateKey (cdr Table))));;Checks the next record in the table
+)
+
+(defun returnTable (tableName dataBase)
+;;Returns a specific table, existance of the table has already been proved
+      (cond ((string-equal tableName (caaar Database))   (car Database));;Table name already used, dataBase is composed of tables, first entry in table represents its composition, first entry of the composition is the name
+            (t (returnTable tableName (cdr Database))))  ;;Checks for the next table in the DB;;dataBase is empty, table doesn't exist
+)
+
+
+
 (defun appendNewRecord (command Table)
 ;;Recieves a command to add a new record and a command to add it to the table
-     (cond ((isKeyAvaliable (car command) Table);;Checks availability of the pk
-            (append Table command))
+     (cond ((isKeyAvaliable (cadr command) Table);;Checks availability of the pk
+            (append Table (list command)))
             (t Table);;If the key isn't available don't modify the record
      )
 )
 
-(defun newRecord (command dataBase) (
+(defun newRecord (command dataBase)
 ;;Adds a new record into the dataBase, this assumes that the command being recieved already recieves the data in the correct format
       (cond ((tableExists (car command) dataBase);;Checks existance of the table
             ;;Appends the dataBase minus the modified table and the modified table with the new record
-            (append (tableDelete (car command) dataBase '())
-                    (appendNewRecord (cdr command) (returnTable (car command) dataBase))))
+                  (append (tableDelete (car command) dataBase '())
+                        (list (appendNewRecord (cdr command) (returnTable (car command) dataBase) ))))
             (t dataBase));;If the table doesn't exist no action is executed
 )
 
 (defun tableDelete (tableName dataBase newDB)
 ;;Deletes a table if it exists inside of the dataBase. The newDB is used to storing the values that have already been evaluated, on the first call it must be an empty list
 ;;This function doesn verify if the specific table is empty
-      (cond ((> list-lenght dataBase 0)
+      (cond ((> (list-length dataBase) 0)
             (cond ((string-equal (caaar dataBase) tableName)
-                  (append newDB (cdr dataBase)))
-                  (t (tableDelete tableName (cdr dataBase) (append newDB (car dataBase))))))
+                        (append newDB (cdr dataBase)))
+                  (t 
+                        (tableDelete tableName (cdr dataBase) (append newDB (car dataBase))))
+            ))
             (t newDB))
-)
-
-(defun returnTable (tableName dataBase)
-;;Returns a specific table, existance of the table has already been tested
-      (cond ((eq tableName (caaar Database))  (car Database));;Table name already used, dataBase is composed of tables, first entry in table represents its composition, first entry of the composition is the name
-            (t (tableExists (cdr Database))))  ;;Checks for the next table in the DB;;dataBase is empty, table doesn't exist
 )
 
 (defun tableExists (tableName dataBase)
 ;; Checks if the name of the table has already been used in an existing table
-           (cond ((> (list-lenght database) 0)
-               (cond ((eq tableName (caaar Database))  t);;Table name already used, dataBase is composed of tables, first entry in table represents its composition, first entry of the composition is the name
-                     (t (tableExists (cdr Database)))
+           (cond ((> (list-length database) 0)
+               (cond ((string-equal tableName (caaar Database))  t);;Table name already used, dataBase is composed of tables, first entry in table represents its composition, first entry of the composition is the name
+                     (t (tableExists tableName (cdr Database)))
                )
            )    ;;Checks for the next table in the DB
            (t nil)
      );;dataBase is empty, table doesn't exist
 )
 
-
 (defun addTable (command dataBase)
-     ;;Adds a new table to the dataBase as long as it contains the required fields, recieves the information without the addt/addtable command
+;;Adds a new table to the dataBase as long as it contains the required fields, recieves the information without the addt/addtable command
      (cond ((tableExists (car command) dataBase) (print "Invalid name for table, already in use"))
-           (t (readFromUser (append dataBase command)))
+           (t (readFromUser (append dataBase (list (list command)))))
      )
 )
-
 
 (defun functSelect (command dataBase)
      ;;Reading the first parameter from de CLI it decides which function is being recieved and acts accordingly
@@ -88,7 +96,7 @@
     :while end))
 
 (defun delimiterp (c) (or (char= c #\Space)))
-;; Marks which characters work as a delimiter when revieving input from CL
+;; Marks which characters work as a delimiter when revieving input from the CL
 
 
 (defun my-read () (my-split (READ-LINE)))
@@ -99,4 +107,6 @@
      (readFromUser dataBase)
 )
 
-(readFromUser '())
+
+(print (returnRecord "123" '(("persona" "id") ("emmanuel" "123") ("fernando" "1234"))  ))
+(print (returnRecord  "1234" '(("persona" "id") ("emmanuel" "123") ("fernando" "1234"))  ))
