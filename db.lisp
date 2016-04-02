@@ -30,6 +30,7 @@
 )
 
 (defun changeOneEntry (tableTitle oldRecord modifications newRecord)
+;;Goes through the table and changes the specific one required, can make one modification
       (cond ( (> (list-length tableTitle) 0)
             (cond ((string-equal (car tableTitle) (car modifications))
                   (append newRecord (list (cadr modifications)) (cdr oldRecord) ))
@@ -38,6 +39,7 @@
 )
 
 (defun editRecord (modifications record tableTitle)
+;;Applies the changeOneEntry to all the requested modifications
       (cond ( (> (list-length modifications) 0)
                   (editRecord  (cddr modifications) (changeOneEntry tableTitle record modifications '())  tableTitle))
             (t record))
@@ -45,6 +47,7 @@
 
 
 (defun modifyRecord (command Table)
+;;Modifies an entry making the required checks, returns the modified table
       (cond ((not (isKeyAvaliable (car command) Table))
             (cond ((evenp (list-length (cdr command)))
                       (cond ((isPKSafe (cdr command) (caar Table)) 
@@ -54,12 +57,27 @@
       (t (print "Record doesn't exist"))  )
 )
 
+
+(defun recordModifier (command dataBase)
+;;modifies records with information based on the information recieved from the user
+      (cond ((tableExists (car command) dataBase);;Checks existance of the table
+            ;;Appends the dataBase minus the modified table and the modified table with the new record
+                  (append (tableDelete (car command) dataBase '())
+                        (list (modifyRecord (cdr command) (returnTable (car command) dataBase)))))
+            (t dataBase));;If the table doesn't exist no action is executed
+)
+
 (defun appendNewRecord (command Table)
 ;;Recieves a command to add a new record and a command to add it to the table
-     (cond ((isKeyAvaliable (cadr command) Table);;Checks availability of the pk
+     (cond ((isKeyAvaliable (car command) Table);;Checks availability of the pk
                   (append Table (list command)))
             (t Table);;If the key isn't available don't modify the record
      )
+)
+
+(defun addRecordError ( dataBase)
+    (print "Requested table doesn't exist")
+    (cond (t dataBase))
 )
 
 (defun newRecord (command dataBase)
@@ -68,7 +86,7 @@
             ;;Appends the dataBase minus the modified table and the modified table with the new record
                   (append (tableDelete (car command) dataBase '())
                         (list (appendNewRecord (cdr command) (returnTable (car command) dataBase) ))))
-            (t dataBase));;If the table doesn't exist no action is executed
+            (t (addRecordError  dataBase)));;If the table doesn't exist no action is executed
 )
 
 
@@ -83,6 +101,22 @@
             (t newTable))
 )
 
+(defun recordDeleterError (error dataBase)
+    (print error)
+    (cond (t database))
+)
+
+(defun recordDeleter (command dataBase)
+;;Deletes a record when requested by the user, doesn't verify the reference by a foreign record since this still hasn't been implemented
+      (cond  ( (tableExists (car command) dataBase) 
+                  (cond ((not (isKeyAvaliable (cadr command) (returnTable (car command) dataBase))) 
+                              (append (tableDelete (car command) dataBase '())
+                                    (list (recordDelete (cadr command) (returnTable (car command) dataBase) '() ))))
+                        (t (recordDeleterError "sorry, the requested record doesn't exist" dataBase)) ))
+            (t (recordDeleterError "sorry, the requested table doesn't exist" dataBase))
+      )
+)
+
 (defun tableDelete (tableName dataBase newDB)
 ;;Deletes a table if it exists inside of the dataBase. The newDB is used to storing the values that have already been evaluated, on the first call it must be an empty list
 ;;This function doesn verify if the specific table is empty
@@ -90,9 +124,23 @@
             (cond ((string-equal (caaar dataBase) tableName)
                         (append newDB (cdr dataBase)))
                   (t 
-                        (tableDelete tableName (cdr dataBase) (append newDB (car dataBase))))
+                        (tableDelete tableName (cdr dataBase) (append newDB (list (car dataBase)))))
             ))
             (t newDB))
+)
+
+(defun tableDeleteError (error dataBase)
+    (print error)
+    (cond (t dataBase))
+)
+
+(defun tableDeleter (command dataBase)
+;;Deletes a table based upon data given by the user
+      (cond ((tableExists (car command) dataBase)
+                  (cond ((< (list-length (returnTable (car command) dataBase)) 2)
+                              (tableDelete (car command) dataBase '())) 
+                        (t (tableDeleteError "you must empty the table before deleting it" dataBase))))
+            (t (tableDeleteError "Sorry the table doesn't exist" dataBase)))
 )
 
 (defun tableExists (tableName dataBase)
@@ -106,25 +154,31 @@
      );;dataBase is empty, table doesn't exist
 )
 
+(defun addTableError (dataBase) 
+;;Called when an insertion into the database fails
+    (print "Invalid name for table, already in use")
+    (cond (t dataBase))
+)
+
 (defun addTable (command dataBase)
 ;;Adds a new table to the dataBase as long as it contains the required fields, recieves the information without the addt/addtable command
-     (cond ((tableExists (car command) dataBase) (print "Invalid name for table, already in use"))
-           (t (readFromUser (append dataBase (list (list command)))))
+     (cond ((tableExists (car command) dataBase) (addTableError dataBase))
+           (t (append dataBase (list (list command))))
      )
 )
 
 (defun functSelect (command dataBase)
 ;;Reading the first parameter from de CLI it decides which function is being recieved and acts accordingly
-     (cond ((or (string-equal (car command) "addt") (string-equal (car command) "addtable"))        (addTable (cdr command) dataBase))
+     (cond ((or (string-equal (car command) "addt") (string-equal (car command) "addtable"))        (readFromUser (addTable (cdr command) dataBase)))
            ((or (string-equal (car command) "addr") (string-equal (car command) "addReference"))    (print "Se leyó creación de nueva record"))
            ((or (string-equal (car command) "remr") (string-equal (car command) "removeReference")) (print "Se leyó eliminacion de referencia"))
-           ((or (string-equal (car command) "ins")  (string-equal (car command) "insert"))          (newRecord (cdr command) dataBase))
-           ((or (string-equal (car command) "ud")   (string-equal (car command) "update"))          (print "Se leyó el update de un record"))
-           ((or (string-equal (car command) "rr")   (string-equal (car command) "remover"))         (print "Se leyó eliminacion de un record"))
-           ((or (string-equal (car command) "dt")   (string-equal (car command) "deltable"))        (print "Se leyó eliminacion de una tabla"))
-           ((string-equal (car command) "query")                                                    (print "Se leyó un query"))
+           ((or (string-equal (car command) "ins")  (string-equal (car command) "insert"))          (readFromUser (newRecord (cdr command) dataBase)))
+           ((or (string-equal (car command) "ud")   (string-equal (car command) "update"))          (readFromUser (recordModifier (cdr command) dataBase)))
+           ((or (string-equal (car command) "rr")   (string-equal (car command) "remover"))         (readFromUser (recordDeleter (cdr command) dataBase)))
+           ((or (string-equal (car command) "dt")   (string-equal (car command) "deltable"))        (readFromUser (tableDeleter (cdr command) dataBase)))
            ((string-equal (car command) "cproc")                                                    (print "Se leyó cproc"))
            ((string-equal (car command) "eval")                                                     (print "Se leyó eval"))
+           ((string-equal (car command) "query")                                                    (print "Se leyó un query"))
            ((string-equal (car command) "showall")                                                  (print "Mostrando toda la DB"))
            (t (print "Unknown command"))
      )
@@ -145,11 +199,9 @@
 (defun my-read () (my-split (READ-LINE)))
 
 (defun readFromUser (dataBase)
-     ;; Cicle that mantains the dataBase in the stack
+;; Cicle that mantains the dataBase in the stack
      (functSelect (my-read) dataBase)
-     (readFromUser dataBase)
 )
 
 
-
-(modifyRecord  '("12" "lastName" "cerdas" "gender" "nil") '(("person" "id" "name" "lastName" "gender") ("123" "emmanuel" "madrigal" "male") ("1234" "fernando" "cerdas" "male")) )
+(readFromUser '() )
