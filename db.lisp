@@ -1,7 +1,7 @@
 (defun isKeyAvaliable (privateKey Table)
 ;; Checks if a private key has already been used inside a table
      (cond ((> (list-length Table) 0)   
-            (cond ((string-equal privateKey (cadar Table))
+            (cond ((string-equal privateKey (caar Table))
                   nil)
             (t (isKeyAvaliable privateKey (cdr Table) ) )
             ))
@@ -11,7 +11,7 @@
 
 (defun returnRecord (privateKey Table)
 ;;Returns a specific record, existance of the record has already been proved
-      (cond ((string-equal privateKey (cadar Table))  (car Table));;Since the private key is unique, a match is the record being looked for
+      (cond ((string-equal privateKey (caar Table))  (car Table));;Since the private key is unique, a match is the record being looked for
             (t (returnRecord privateKey (cdr Table))));;Checks the next record in the table
 )
 
@@ -21,12 +21,43 @@
             (t (returnTable tableName (cdr Database))))  ;;Checks for the next table in the DB;;dataBase is empty, table doesn't exist
 )
 
+(defun isPKSafe (modifications privateKey)
+;;When a record is being modified, it verifies that the privateKey isnt being modified, privateKey referes to the generic name asigned
+      (cond ((> (list-length modifications) 0)
+            (cond ((string-equal (car modifications) privateKey) nil)
+                  (t (isPKSafe (cddr modifications) privateKey)) ))
+      (t t))
+)
 
+(defun changeOneEntry (tableTitle oldRecord modifications newRecord)
+      (cond ( (> (list-length tableTitle) 0)
+            (cond ((string-equal (car tableTitle) (car modifications))
+                  (append newRecord (list (cadr modifications)) (cdr oldRecord) ))
+            (t (changeOneEntry (cdr tableTitle) (cdr oldRecord) modifications (append newRecord (list (car oldRecord)))))))
+      (t newRecord))
+)
+
+(defun editRecord (modifications record tableTitle)
+      (cond ( (> (list-length modifications) 0)
+                  (editRecord  (cddr modifications) (changeOneEntry tableTitle record modifications '())  tableTitle))
+            (t record))
+)
+
+
+(defun modifyRecord (command Table)
+      (cond ((not (isKeyAvaliable (car command) Table))
+            (cond ((evenp (list-length (cdr command)))
+                      (cond ((isPKSafe (cdr command) (caar Table)) 
+                           (append  (recordDelete (car command) Table '()) (list (editRecord (cdr command) (returnRecord (car command) Table)  (cdar Table))) ))
+                      (t (print "Invalid command id being modified"))))
+                  (t (print "Invalid number of arguments"))))
+      (t (print "Record doesn't exist"))  )
+)
 
 (defun appendNewRecord (command Table)
 ;;Recieves a command to add a new record and a command to add it to the table
      (cond ((isKeyAvaliable (cadr command) Table);;Checks availability of the pk
-            (append Table (list command)))
+                  (append Table (list command)))
             (t Table);;If the key isn't available don't modify the record
      )
 )
@@ -38,6 +69,18 @@
                   (append (tableDelete (car command) dataBase '())
                         (list (appendNewRecord (cdr command) (returnTable (car command) dataBase) ))))
             (t dataBase));;If the table doesn't exist no action is executed
+)
+
+
+(defun recordDelete (privateKey Table newTable)
+;;Recieves the table without the information entry, and deletes a record
+      (cond ((> (list-length Table) 0)
+            (cond ((string-equal (caar Table) privateKey)
+                        (append newTable (cdr Table)))
+                  (t 
+                        (recordDelete privateKey (cdr Table) (append newTable (list (car Table)))))
+            ))
+            (t newTable))
 )
 
 (defun tableDelete (tableName dataBase newDB)
@@ -71,7 +114,7 @@
 )
 
 (defun functSelect (command dataBase)
-     ;;Reading the first parameter from de CLI it decides which function is being recieved and acts accordingly
+;;Reading the first parameter from de CLI it decides which function is being recieved and acts accordingly
      (cond ((or (string-equal (car command) "addt") (string-equal (car command) "addtable"))        (addTable (cdr command) dataBase))
            ((or (string-equal (car command) "addr") (string-equal (car command) "addReference"))    (print "Se leyó creación de nueva record"))
            ((or (string-equal (car command) "remr") (string-equal (car command) "removeReference")) (print "Se leyó eliminacion de referencia"))
@@ -88,7 +131,7 @@
 )
 
 (defun my-split (string &key (delimiterp #'delimiterp))
-  ;; Splits a string into a list containing substrings, this division is stablished by delimiterp
+;; Splits a string into a list containing substrings, this division is stablished by delimiterp
   (loop :for beg = (position-if-not delimiterp string)
     :then (position-if-not delimiterp string :start (1+ end))
     :for end = (and beg (position-if delimiterp string :start beg))
@@ -108,5 +151,5 @@
 )
 
 
-(print (returnRecord "123" '(("persona" "id") ("emmanuel" "123") ("fernando" "1234"))  ))
-(print (returnRecord  "1234" '(("persona" "id") ("emmanuel" "123") ("fernando" "1234"))  ))
+
+(modifyRecord  '("12" "lastName" "cerdas" "gender" "nil") '(("person" "id" "name" "lastName" "gender") ("123" "emmanuel" "madrigal" "male") ("1234" "fernando" "cerdas" "male")) )
