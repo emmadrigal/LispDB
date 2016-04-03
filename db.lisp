@@ -85,18 +85,19 @@
             (cond ((evenp (list-length (cdr command)))
                       (cond ((isPKSafe (cdr command) (caar Table)) 
                            (append  (recordDelete (car command) Table '()) (list (editRecord (cdr command) (returnRecord (car command) Table)  (cdar Table))) ))
-                      (t (print "Invalid command id being modified"))))
-                  (t (print "Invalid number of arguments"))))
-      (t (print "Record doesn't exist"))  )
+                      (t (progn (print "Invalid command id being modified") Table))))
+                  (t (progn (print "Invalid number of arguments") Table))))
+      (t (progn (print "Record doesn't exist") Table)))
 )
-
 
 (defun recordModifier (command dataBase)
 ;;modifies records with information based on the information recieved from the user
-      (cond ((tableExists (car command) dataBase);;Checks existance of the table
+      (cond ((tableExists (car command) (car dataBase));;Checks existance of the table
             ;;Appends the dataBase minus the modified table and the modified table with the new record
-                  (append (tableDelete (car command) dataBase '())
-                        (list (modifyRecord (cdr command) (returnTable (car command) dataBase)))))
+                  (append 
+                       (list (append (append (list (modifyRecord (cdr command) (returnTable (car command) (car dataBase))))
+                                            (tableDelete (car command) (car dataBase) '()))))
+                                      (cdr dataBase)))
             (t dataBase));;If the table doesn't exist no action is executed
 )
 
@@ -108,20 +109,21 @@
      )
 )
 
-(defun addRecordError ( error dataBase)
+(defun addRecordError (error dataBase)
     (print error)
     (cond (t dataBase))
 )
 
 (defun newRecord (command dataBase)
 ;;Adds a new record into the dataBase, this assumes that the command being recieved already recieves the data in the correct format
-      (cond ((tableExists (car command) dataBase);;Checks existance of the table
+      (cond ((tableExists (car command) (car dataBase));;Checks existance of the table
             ;;Appends the dataBase minus the modified table and the modified table with the new record
-                (cond ((isKeyAvaliable (cadr command) (returnTable (car command) dataBase))
-                        (append (tableDelete (car command) dataBase '())
-                              (list (appendNewRecord (cdr command) (returnTable (car command) dataBase) ))))
-
-                      (t  (addRecordError "privateKey already in use"dataBase))))
+                (cond ((isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))
+                        (append
+                              (append (append (list (appendNewRecord (cdr command) (returnTable (car command) (car dataBase)))))
+                                                  (tableDelete (car command) (car dataBase) '()))
+                                      (cdr dataBase)))
+                      (t  (addRecordError "privateKey already in use" dataBase))))
             (t (addRecordError "Requested table doesn't exist" dataBase)));;If the table doesn't exist no action is executed
 )
 
@@ -144,10 +146,12 @@
 
 (defun recordDeleter (command dataBase)
 ;;Deletes a record when requested by the user, doesn't verify the reference by a foreign record since this still hasn't been implemented
-      (cond  ( (tableExists (car command) dataBase) 
-                  (cond ((not (isKeyAvaliable (cadr command) (returnTable (car command) dataBase))) 
-                              (append (tableDelete (car command) dataBase '())
-                                    (list (recordDelete (cadr command) (returnTable (car command) dataBase) '() ))))
+      (cond  ( (tableExists (car command) (car dataBase)) 
+                  (cond ((not (isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))) 
+                              ( append (list (append (tableDelete (car command) (car dataBase) '())
+                                                      (list (recordDelete (cadr command) (returnTable (car command) (car dataBase)) '() ))))
+                                        (cdr dataBase))
+                              )
                         (t (recordDeleterError "sorry, the requested record doesn't exist" dataBase)) ))
             (t (recordDeleterError "sorry, the requested table doesn't exist" dataBase))
       )
@@ -207,10 +211,7 @@
 (defun queryError (error Database)
       (print error)
       (Database)
-
-
 )
-
 
 (defun printFilteredEntry (record column)
 ;;Prints the selected columns from a record
@@ -249,7 +250,7 @@
                     filteredColumns)
               (t (filteredColumnsPos TableTitle
                                     (cdr requestedColumns)
-                                    (append filteredColumns (list (columnPosition TableTitle (car requestedColumns) 0)))))  )
+                                    (append filteredColumns (list (- (columnPosition TableTitle (car requestedColumns) 0) 1)))))  )
 )
 
 
@@ -264,6 +265,7 @@
 
 (defun showTable (table count)
 ;;Shows all of the records in a table and all of its columns
+;;Count is used in order to print the table name and its title in the correct order
       (cond ((eq 0 count)
                     (progn
                           (format t "~a ~%" (caar table))
@@ -277,15 +279,15 @@
 )
 
 (defun filterRecord (record filter pos)
-;;Determines if a record must be conserved for the final query 
-      (cond ((string-equal (car (nthcdr pos record)) filter)
+;;Determines if a record must be conserved for the final query
+      (cond ((string-equal (car (nthcdr (- pos 1) record)) filter)
                   t)
             (t nil))
 )
 
 (defun filterTable (newTable oldTable columnPos filter)
 ;;Takes a table and a filter for one of its columns and returns the table without those columns
-;;columnPos is zero-indexed
+;;columnPos is zero-indexedr
     (cond ((not (eq 0 (list-length oldTable)))
                 ( cond ((filterRecord (car oldTable) filter columnPos)
                             (filterTable (append newTable (list (car oldTable)))  (cdr oldTable)  columnPos filter))
@@ -294,43 +296,54 @@
 
 
 (defun tableFilter (oldTable filters tableTitle)
+;;Applies filterTable for several tables
       (cond ((eq 0 (list-length filters))
                   oldTable)
             (t (tableFilter (filterTable '() oldTable (columnPosition TableTitle (car filters) 0) (cadr filters)) (cddr filters) tableTitle)))
 )
 
 (defun query (command dataBase)
+;;Recieves queries from users and executes the correct action
   (progn
-      (cond ((tableExists (car command)) 
-                (cond ((eq 0 (list-length (cdr command))) 
-                            (showTable (returnTable (car command) dataBase) 0))
+      (cond ((tableExists (car command) (car dataBase));;Checks existance of the queried table 
+                (cond ((eq 0 (list-length (cdr command))) ;;If there aren't more commands, print all the table
+                            (showTable (returnTable (car command) (car dataBase)) 0))
                       (t
-                        (cond ((not (eq 0 (list-length (cddr command))) )
-                                  (cond ((string-equal "all" (cadr command))
-                                      (showTable (tableFilter 
-                                                      (returnTable (car command) dataBase)
-                                                      (cddr command)
-                                                      (car (returnTable (car command) dataBase))) 0))
-                                      (t (showFilteredTable (tableFilter (returnTable (car command) dataBase) (cddr command) (car (returnTable (car command) dataBase)))
+                        (cond ((not (eq 0 (list-length (cddr command))) ) ;; If there are filters
+                                  (cond ((string-equal "all" (caadr command));;Wants to see all columns with filters
+                                              (showTable (append (list (car (returnTable (car command) (car dataBase))))
+                                                                (tableFilter 
+                                                                    (returnTable (car command) (car dataBase))
+                                                                    (cddr command)
+                                                                    (car (returnTable (car command) (car dataBase))))) 0))
+                                      ;;User wants to see some coluns with filters
+                                      (t (showFilteredTable (append (list (car (returnTable (car command) (car dataBase))))
+                                                                (tableFilter 
+                                                                    (returnTable (car command) (car dataBase))
+                                                                    (cddr command)
+                                                                    (car (returnTable (car command) (car dataBase)))))
                                                             0
-                                                            (filteredColumnsPos (car (returnTable (car command) dataBase)) (cadr command) '())))))
-                                (t )))))  ;;Returns all the entries with some columns removed
+                                                            (filteredColumnsPos (car (returnTable (car command) (car dataBase))) (cadr command) '())))))
+                                 ;;User wants some columns without any filters applied
+                                (t (showFilteredTable (returnTable (car command) (car dataBase))
+                                                            0
+                                                            (filteredColumnsPos (car (returnTable (car command) (car dataBase))) (cadr command) '())))))))
             (t (queryError "Table doesn't exist") ))
       (cond (t dataBase))))
 
-
 (defun functSelect (command dataBase)
+      (print command)
 ;;Reading the first parameter from de CLI it decides which function is being recieved and acts accordingly
-     (cond ((or (string-equal (car command) "addt") (string-equal (car command) "addtable"))        (readFromUser (addTable (cdr command) dataBase)))
+     (cond ((or (string-equal (car command) "addt") (string-equal (car command) "addtable"))        (readFromUser (append (list (addTable (cdr command) (car dataBase))) (cdr dataBase))))
            ((or (string-equal (car command) "addr") (string-equal (car command) "addReference"))    (readFromUser (referenceAdder (cdr command) dataBase)))
            ((or (string-equal (car command) "remr") (string-equal (car command) "removeReference")) (readFromUser (referenceDeleter (cdr command) dataBase)))
            ((or (string-equal (car command) "ins")  (string-equal (car command) "insert"))          (readFromUser (newRecord (cdr command) dataBase)))
            ((or (string-equal (car command) "ud")   (string-equal (car command) "update"))          (readFromUser (recordModifier (cdr command) dataBase)))
            ((or (string-equal (car command) "rr")   (string-equal (car command) "remover"))         (readFromUser (recordDeleter (cdr command) dataBase)))
-           ((or (string-equal (car command) "dt")   (string-equal (car command) "deltable"))        (readFromUser (tableDeleter (cdr command) dataBase)))
+           ((or (string-equal (car command) "dt")   (string-equal (car command) "deltable"))        (readFromUser (append (list (tableDeleter (cdr command) (car dataBase))) (cdr dataBase))))
            ((string-equal (car command) "cproc")                                                    (print "Se leyó cproc"))
            ((string-equal (car command) "eval")                                                     (print "Se leyó eval"))
-           ((string-equal (car command) "query")                                                    (print "Se leyó un query"))
+           ((string-equal (car command) "query")                                                    (readFromUser (query (cdr command) dataBase)))
            ((string-equal (car command) "showall")                                                  (print "Mostrando toda la DB"))
            (t (print "Unknown command"))
      )
@@ -385,20 +398,20 @@
 ;;my-split doesn't conserve the union created by the parenthesis, this functions restores this and joins them in a list
      (cond ((not (eq 0 (length OldString)))
                (cond ((string-equal "(" (char (car oldString) 0))
-                         (parenthesisRestore (listAfterClosingParenthesis (cdr oldString)) 
+                         (parenthesisRestore (listAfterClosingParenthesis  oldString) 
                                 (append newString (list (finalParenthesis '() (cons (replace-all (car oldString) "(" "") (cdr oldString))))))
                      )
                     (t (parenthesisRestore (cdr oldString) (append newString (list (car oldString)))))))
           (t newString))
 )
 
+(defun my-read () (parenthesisRestore (my-split (READ-LINE)) '()))
 
-(defun my-read () (my-split (READ-LINE)))
 
 (defun readFromUser (dataBase)
 ;; Cicle that mantains the dataBase in the stack
-      (print dataBase)
+      (format t "~%")
      (functSelect (my-read) dataBase)
 )
 
-(readFromUser '( ()  ()  ()) )
+(readFromUser '(((("person" "id" "name") ("1" "emma") ("2" "kevin")) (("animal" "id" "name"))) NIL NIL)  )
