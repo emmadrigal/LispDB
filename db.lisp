@@ -25,11 +25,11 @@
 ;;Recieves a the title of a table and the name of column that whishes to be referenced
       (cond ((> (list-length TableTitle) 0)
             (cond ((string-equal (car TableTitle) columnName) t)
-                  (t (columnExists columnName (cdr TableTitle))) ))
+                  (t (columnExists columnName (cdr TableTitle)))))
       (t nil))
 )
 
-(defun referenceAdderError (error dataBase)
+(defun referenceError (error dataBase)
     (print error)
     (cond (t dataBase))
 )
@@ -39,18 +39,28 @@
       (cond ((eq (list-length command) 3)
                     (cond ((and (tableExists (car command) (car dataBase)) (tableExists (caddr command) (car dataBase)))
                                 (cond ((< (list-length (returnTable  (car command) (car dataBase))) 2) 
-                                            (cond ((columnExists (cadr command) (car (returnTable  (caddr command) (car dataBase))))
-                                                        (append  (list (car dataBase))  (append (cadr Database) (list command)) (cddr Database)) )
-                                                  (t  (referenceAdderError "The requested column doesn't exists" dataBase)) ))  
-                                      (t  (referenceAdderError "One table already has records inserted in it" dataBase) )))
-                          (t (referenceAdderError "Requested table doesn't exist" dataBase))))
-            (t (referenceAdderError "Incorrect number of arguments" dataBase)))
+                                            (cond ((columnExists (cadr command) (car (returnTable  (car command) (car dataBase))))
+                                                        (append  (list (car dataBase))  (append (cadr Database) (list (list command))) (cddr Database)) )
+                                                  (t  (referenceError "The requested column doesn't exists" dataBase)) ))  
+                                      (t  (referenceError "One table already has records inserted in it" dataBase) )))
+                          (t (referenceError "Requested table doesn't exist" dataBase))))
+            (t (referenceError "Incorrect number of arguments" dataBase)))
 )
 
-
+(defun deleteReference (command oldReferenceTable newReferenceTable)
+;;Deletes an entry from the reference table
+      (cond ((not (eq 0 (list-length oldReferenceTable))) ;;Checks if all references have been checked
+                    (cond ((and (string-equal (car command) (caar oldReferenceTable)) (string-equal (cadr command) (cadar oldReferenceTable)) (string-equal (caddr command) (caddar oldReferenceTable)))
+                              (list (append  newReferenceTable (cdr oldReferenceTable))))
+                          (t  (deleteReference command (cdr oldReferenceTable) (cons (car oldReferenceTable) newReferenceTable)))))
+        (t (list newReferenceTable)))
+)
 
 (defun referenceDeleter (command dataBase)
-      ()
+;;Checks for validity in the recieved command and deletes it
+      (cond ((eq (list-length command) 3)
+                  (append (list (car dataBase)) (deleteReference command (cadr dataBase) '())  (cddr Database)))
+            (t (referenceError "Incorrect number of arguments" dataBase)))
 )
 
 
@@ -114,15 +124,54 @@
     (cond (t dataBase))
 )
 
+(defun foreignKeyExists (foreignKey foreignTable tableTable)
+;;Checks if a value exists as a private key in another table
+      (cond ( (not (isKeyAvaliable foreignKey (returnTable foreignTable tableTable)))
+                  t);;Foreign key exists
+            (t nil));;Foreign key isn't available
+)
+
+(defun referencesFromTable (tableName referenceTable references)
+;;Returns a list with all the references that come from this table
+      (cond ((not (eq 0 (list-length referenceTable)))
+                  (cond ((string-equal tableName (caar referenceTable))
+                              (referencesFromTable tableName (cdr referenceTable) (append references (list(car referenceTable)))))
+                        (t (referencesFromTable  tableName  (cdr referenceTable) references))))
+            (t references))
+)
+
+
+(defun hasForeignKey (tableName referenceTable)
+;;Checks if any of the columns is a reference to an foreign table
+      (cond ((not (eq 0 (list-length referenceTable)));;Have all references been checked
+                (cond ((string-equal tableName (caar referenceTable)) ;; Is the table referenced in the first reference
+                            t)
+                      (t  (hasForeignKey tableName (cdr referenceTable)))));;Repeat for the next reference
+            (t nil));;Table hasn't been referenced
+)
+
+(defun checkForeignKeys (references command tableTable )
+;;Checks if all of the foreignKeys in the command are valid
+      (cond ((eq 0 (list-length references))
+                t)
+            (t (cond ((foreignKeyExists (nth
+                                           (columnPosition (car (returnTable (car command) tableTable)) (cadar references) 0) command)
+                                           (caddar references)
+                                           tableTable)
+                                       (checkForeignKeys (cdr references) command tableTable))
+                              (t  nil)))))
+
 (defun newRecord (command dataBase)
 ;;Adds a new record into the dataBase, this assumes that the command being recieved already recieves the data in the correct format
-      (cond ((tableExists (car command) (car dataBase));;Checks existance of the table
+      (cond ( (tableExists (car command) (car dataBase));;Checks existance of the table
             ;;Appends the dataBase minus the modified table and the modified table with the new record
-                (cond ((isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))
-                        (append
-                              (append (append (list (appendNewRecord (cdr command) (returnTable (car command) (car dataBase)))))
-                                                  (tableDelete (car command) (car dataBase) '()))
-                                      (cdr dataBase)))
+                (cond ( (isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))
+                              (cond ( (checkForeignKeys (referencesFromTable (car command) (cadr dataBase) '())  command (car dataBase))
+                                            (append
+                                                    (list (append (append (list (appendNewRecord (cdr command) (returnTable (car command) (car dataBase)))))
+                                                    (tableDelete (car command) (car dataBase) '())))
+                                                    (cdr dataBase)))
+                                            (t (addRecordError "The foreign key doesn't exist" dataBase))))
                       (t  (addRecordError "privateKey already in use" dataBase))))
             (t (addRecordError "Requested table doesn't exist" dataBase)));;If the table doesn't exist no action is executed
 )
@@ -174,12 +223,26 @@
     (cond (t dataBase))
 )
 
+
+
+(defun isTableReferenced (tableName referenceTable)
+;;Checks if a reference points to this table
+      (cond ((not (eq 0 (list-length referenceTable)));;Have all references been checked
+                (cond ((string-equal tableName (caddar referenceTable)) ;; Is the table referenced in the first reference
+                            t)
+                      (t  (isTableReferenced tableName (cdr referenceTable)))));;Repeat for the next reference
+            (t nil));;Table hasn't been referenced
+)
+
 (defun tableDeleter (command dataBase)
 ;;Deletes a table based upon data given by the user
-      (cond ((tableExists (car command) dataBase)
-                  (cond ((< (list-length (returnTable (car command) dataBase)) 2)
-                              (tableDelete (car command) dataBase '())) 
-                        (t (tableDeleteError "you must empty the table before deleting it" dataBase))))
+      (cond ((tableExists (car command) (car dataBase))
+                    (cond ((isTableReferenced (car command) (cadr  dataBase))
+                                    (tableDeleteError "You must delete the reference to this table before deleting it"  database))
+                            (t  (cond ((< (list-length (returnTable (car command) (car dataBase))) 2)
+                                        (append (list (tableDelete (car command) (car dataBase) '()))
+                                                (cdr dataBase)))
+                                      (t (tableDeleteError "you must empty the table before deleting it" dataBase))))))
             (t (tableDeleteError "Sorry the table doesn't exist" dataBase)))
 )
 
@@ -332,7 +395,6 @@
       (cond (t dataBase))))
 
 (defun functSelect (command dataBase)
-      (print command)
 ;;Reading the first parameter from de CLI it decides which function is being recieved and acts accordingly
      (cond ((or (string-equal (car command) "addt") (string-equal (car command) "addtable"))        (readFromUser (append (list (addTable (cdr command) (car dataBase))) (cdr dataBase))))
            ((or (string-equal (car command) "addr") (string-equal (car command) "addReference"))    (readFromUser (referenceAdder (cdr command) dataBase)))
@@ -340,12 +402,12 @@
            ((or (string-equal (car command) "ins")  (string-equal (car command) "insert"))          (readFromUser (newRecord (cdr command) dataBase)))
            ((or (string-equal (car command) "ud")   (string-equal (car command) "update"))          (readFromUser (recordModifier (cdr command) dataBase)))
            ((or (string-equal (car command) "rr")   (string-equal (car command) "remover"))         (readFromUser (recordDeleter (cdr command) dataBase)))
-           ((or (string-equal (car command) "dt")   (string-equal (car command) "deltable"))        (readFromUser (append (list (tableDeleter (cdr command) (car dataBase))) (cdr dataBase))))
+           ((or (string-equal (car command) "dt")   (string-equal (car command) "deltable"))        (readFromUser (tableDeleter (cdr command) dataBase)))
            ((string-equal (car command) "cproc")                                                    (print "Se leyó cproc"))
            ((string-equal (car command) "eval")                                                     (print "Se leyó eval"))
            ((string-equal (car command) "query")                                                    (readFromUser (query (cdr command) dataBase)))
            ((string-equal (car command) "showall")                                                  (print "Mostrando toda la DB"))
-           (t (print "Unknown command"))
+           (t (progn (print "Unknown command") (readFromUser dataBase)))
      )
 )
 
@@ -410,8 +472,9 @@
 
 (defun readFromUser (dataBase)
 ;; Cicle that mantains the dataBase in the stack
+      (print dataBase)
       (format t "~%")
      (functSelect (my-read) dataBase)
 )
 
-(readFromUser '(((("person" "id" "name") ("1" "emma") ("2" "kevin")) (("animal" "id" "name"))) NIL NIL)  )
+(readFromUser '(NIL NIL NIL)   )
