@@ -42,7 +42,7 @@
                                             (cond ((columnExists (cadr command) (car (returnTable  (car command) (car dataBase))))
                                                         (append  (list (car dataBase))  (append (cadr Database) (list (list command))) (cddr Database)) )
                                                   (t  (referenceError "The requested column doesn't exists" dataBase)) ))  
-                                      (t  (referenceError "One table already has records inserted in it" dataBase) )))
+                                      (t  (referenceError "The table already has records inserted in it" dataBase) )))
                           (t (referenceError "Requested table doesn't exist" dataBase))))
             (t (referenceError "Incorrect number of arguments" dataBase)))
 )
@@ -161,19 +161,59 @@
                                        (checkForeignKeys (cdr references) command tableTable))
                               (t  nil)))))
 
+
+
+
+(defun paramPos (paramList param pos)
+;;Returns the position of a parameter according to the data sent by the user
+      (cond ((string-equal (car paramList) param)
+                pos)
+            (t (paramPos (cdr paramList) param (+ 1 pos))))
+)
+
+
+(defun paramPresent (paramList  data)
+;;Checks whether a parameter was sent
+        (cond ((not (eq 0 (list-length paramList)))
+                    (cond ((string-equal (car paramList) data)
+                                t)
+                          (t (paramPresent (cdr paramList) data))))
+            (t nil))
+)
+
+
+(defun createCommand (paramList data commandFormat newCommand)
+      (cond ((not (eq 0 (list-length commandFormat)))
+                  (cond ((paramPresent paramList (car commandFormat))
+                              (createCommand paramList data (cdr commandFormat) (append newCommand (list (nth (paramPos paramList (car commandFormat) 0 )  data)  ) )))
+                        (t (createCommand paramList data (cdr commandFormat) (append newCommand (list "nil") )))))
+            (t newCommand))
+)
+
+(defun formatEntry  (paramList data commandFormat)
+;;If an insert operation has a parentesis to indicate that not all records are available it returns the command in a formated form
+      (cond ((paramPresent paramList (car commandFormat))
+                  (createCommand paramList data commandFormat '()))
+        (t  (print "no se encuentra llave")))
+)
+
+
 (defun newRecord (command dataBase)
 ;;Adds a new record into the dataBase, this assumes that the command being recieved already recieves the data in the correct format
-      (cond ( (tableExists (car command) (car dataBase));;Checks existance of the table
+      (cond ((listp (cadr command))
+                  (newRecord (cons (car command) (formatEntry (cadr command) (cddr command) (cdr (car (returnTable (car command) (car dataBase)))) )) dataBase))
+            (t (cond ( (tableExists (car command) (car dataBase));;Checks existance of the table
             ;;Appends the dataBase minus the modified table and the modified table with the new record
-                (cond ( (isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))
+                        (cond ( (isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))
                               (cond ( (checkForeignKeys (referencesFromTable (car command) (cadr dataBase) '())  command (car dataBase))
                                             (append
                                                     (list (append (append (list (appendNewRecord (cdr command) (returnTable (car command) (car dataBase)))))
                                                     (tableDelete (car command) (car dataBase) '())))
                                                     (cdr dataBase)))
                                             (t (addRecordError "The foreign key doesn't exist" dataBase))))
-                      (t  (addRecordError "privateKey already in use" dataBase))))
-            (t (addRecordError "Requested table doesn't exist" dataBase)));;If the table doesn't exist no action is executed
+                              (t  (addRecordError "privateKey already in use" dataBase))))
+                      (t (addRecordError "Requested table doesn't exist" dataBase)))));;If the table doesn't exist no action is executed))
+      
 )
 
 
