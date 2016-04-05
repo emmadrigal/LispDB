@@ -166,19 +166,19 @@
 
 (defun newRecord (command dataBase)
 ;;Adds a new record into the dataBase, this assumes that the command being recieved already recieves the data in the correct format
-      (cond ((listp (cadr command))
-                  (newRecord (cons (car command) (formatEntry (cadr command) (cddr command) (cdr (car (returnTable (car command) (car dataBase)))) )) dataBase))
-            (t (cond ( (tableExists (car command) (car dataBase));;Checks existance of the table
+            (cond ( (tableExists (car command) (car dataBase));;Checks existance of the table
             ;;Appends the dataBase minus the modified table and the modified table with the new record
-                        (cond ( (isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))
-                              (cond ( (checkForeignKeys (referencesFromTable (car command) (cadr dataBase) '())  command (car dataBase))
+                        (cond ((listp (cadr command))
+                                  (newRecord (cons (car command) (formatEntry (cadr command) (cddr command) (cdr (car (returnTable (car command) (car dataBase)))) )) dataBase))
+                              (t (cond ( (isKeyAvaliable (cadr command) (returnTable (car command) (car dataBase)))
+                                        (cond ( (checkForeignKeys (referencesFromTable (car command) (cadr dataBase) '())  command (car dataBase))
                                             (append
                                                     (list (append (append (list (appendNewRecord (cdr command) (returnTable (car command) (car dataBase)))))
                                                     (tableDelete (car command) (car dataBase) '())))
                                                     (cdr dataBase)))
                                             (t (addRecordError "The foreign key doesn't exist" dataBase))))
-                              (t  (addRecordError "privateKey already in use" dataBase))))
-                      (t (addRecordError "Requested table doesn't exist" dataBase))))));;If the table doesn't exist no action is executed))
+                              (t  (addRecordError "PrivateKey already in use, please choose a unique key" dataBase))))))
+                      (t (addRecordError "Requested table doesn't exist" dataBase))));;If the table doesn't exist no action is executed))
       
 (defun recordDelete (privateKey Table newTable)
 ;;Recieves the table without the information entry, and deletes a record
@@ -202,8 +202,8 @@
                                                       (list (recordDelete (cadr command) (returnTable (car command) (car dataBase)) '() ))))
                                         (cdr dataBase))
                               )
-                        (t (recordDeleterError "sorry, the requested record doesn't exist" dataBase)) ))
-            (t (recordDeleterError "sorry, the requested table doesn't exist" dataBase))))
+                        (t (recordDeleterError "Sorry, the requested record doesn't exist" dataBase)) ))
+            (t (recordDeleterError "Sorry, the requested table doesn't exist" dataBase))))
 
 (defun tableDelete (tableName dataBase newDB)
 ;;Deletes a table if it exists inside of the dataBase. The newDB is used to storing the values that have already been evaluated, on the first call it must be an empty list
@@ -235,7 +235,7 @@
                             (t  (cond ((< (list-length (returnTable (car command) (car dataBase))) 2)
                                         (append (list (tableDelete (car command) (car dataBase) '()))
                                                 (cdr dataBase)))
-                                      (t (tableDeleteError "you must empty the table before deleting it" dataBase))))))
+                                      (t (tableDeleteError "You must empty the table before deleting it" dataBase))))))
             (t (tableDeleteError "Sorry the table doesn't exist" dataBase))))
 
 (defun tableExists (tableName dataBase)
@@ -365,7 +365,7 @@
                                 (t (showFilteredTable (returnTable (car command) (car dataBase))
                                                             0
                                                             (filteredColumnsPos (car (returnTable (car command) (car dataBase))) (cadr command) '())))))))
-            (t (queryError "Table doesn't exist") ))
+            (t (queryError "Requested table doesn't exist" dataBase) ))
       (cond (t dataBase))))
 
 
@@ -411,7 +411,6 @@
       (t command))
 )
 
-
 (defun evalProcedureError (error dataBase)
     (print error)
     (readFromUser dataBase)
@@ -427,7 +426,57 @@
     (t (evalProcedureError "Requested Function doesn't exist" dataBase)))
 )
 
+(defun printList (listToPrint)
+      (cond ((eq 0 (list-length listToPrint)))
+            (t (progn 
+                    (format t " ~a " (car listToPrint))
+                    (printList (cdr listToPrint))))))
 
+
+(defun printProcedure (procedure) 
+;;Returns one procedure on the command Line in the correct format
+      (format t " ~a | ~a |" (car procedure) (cadr procedure) )
+      (printList (cddr procedure))
+      (format t "~%"))
+
+
+(defun showAllProcedures (procedureList count)
+      (cond ((eq 0 count)
+                    (progn
+                          (printEntry '("Function Name" "User Parameters" "Command"))
+                          (showAllProcedures procedureList 1)))
+              (t (cond ((eq 0 (list-length procedureList))
+                      (format t "~%"))
+                  (t (progn
+                      (printProcedure (car procedureList))
+                      (showAllProcedures (cdr procedureList) count)))))))
+
+
+(defun showAllReferences (referencelist count)
+      (cond ((eq 0 count)
+                    (progn
+                          (printEntry '("Table" "Foreign Key Column" "Source Table"))
+                          (showAllReferences referencelist 1)))
+              (t (cond ((eq 0 (list-length referencelist))
+                      (format t "~%"))
+                  (t (progn
+                      (printEntry (car referencelist))
+                      (showAllReferences (cdr referencelist) count)))))))
+
+(defun showallTables (tableList)
+  (cond ((not (eq 0 (list-length tableList)))
+        (progn  (showTable (car tableList) 0) (showallTables (cdr tableList)))))
+)
+
+(defun showall (database)
+  (format t "Printing all the tables ~%")
+  (showallTables (car database))
+  (format t "~% Printing all of the references ~%")
+  (showAllReferences (cadr database) 0)
+  (format t "~% Priting all the stored procedures ~%")
+  (showAllProcedures (caddr database) 0)
+  database
+)
 
 (defun functSelect (command dataBase)
 ;;Reading the first parameter from de CLI it decides which function is being recieved and acts accordingly
@@ -441,7 +490,8 @@
            ((string-equal (car command) "cproc")                                                    (readFromUser (createProcedure  (cdr command) dataBase)))
            ((string-equal (car command) "eval")                                                     (evaluateProcedure (cdr command) dataBase))
            ((string-equal (car command) "query")                                                    (readFromUser (query (cdr command) dataBase)))
-           ((string-equal (car command) "showall")                                                  (print "Mostrando toda la DB"))
+           ((string-equal (car command) "showall")                                                  (readFromUser (showall dataBase)))
+           ((string-equal (car command) "quit")                                                     (ext:exit))
            (t (progn (print "Unknown command") (readFromUser dataBase)))))
 
 (defun my-split (string &key (delimiterp #'delimiterp))
@@ -500,14 +550,16 @@
 
 (defun readFromUser (dataBase)
 ;; Cicle that mantains the dataBase in the stack
-      (print dataBase)
       (format t "~%")
      (functSelect (my-read) dataBase))
 
-(readFromUser '(((("institution" "id" "name" "location"))
-  (("person" "id" "name" "lastname" "gender")))
- NIL
- (("InsertInstitution" ("ident" "loc" "n") "insert" "institution"
-   ("id" "name" "location") "ident" "n" "loc")
-  ("AddPerson" ("ced" "gen" "n" "lastn") "insert" "person"
-   ("id" "name" "lastname" "gender") "ced" "n" "lastn" "gen")))   )
+(readFromUser '(((("class" "idClass" "name" "idInstitution") ("123" "Languages" "1")
+   ("456" "Math" "3"))
+  (("institution" "id" "name" "location") ("2" "UNA" "Heredia")
+   ("1" "TEC" "San_Jose")))
+ (("class" "idInstitution" "institution"))
+ (("InsertInstitution" ("iden" "loc" "n") "insert" "institution"
+   ("id" "name" "location") "iden" "n" "loc")
+  ("Addperson" ("ced" "gen" "n" "lastn") "insert" "person"
+   ("id" "name" "lastname" "gender") "ced" "n" "lastn" "gen"))) 
+   )
