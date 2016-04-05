@@ -9,7 +9,7 @@
 (defun returnRecord (privateKey Table)
 ;;Returns a specific record, existance of the record has already been proved
       (cond ((string-equal privateKey (caar Table))  (car Table));;Since the private key is unique, a match is the record being looked for
-            (t (returnRecord privateKey (cdr Table))));;Checks the next record in the table
+            (t (returnRecord privateKey (cdr Table)))));;Checks the next record in the table
 
 (defun returnTable (tableName dataBase)
 ;;Returns a specific table, existance of the table has already been proved
@@ -124,7 +124,7 @@
                 (cond ((string-equal tableName (caar referenceTable)) ;; Is the table referenced in the first reference
                             t)
                       (t  (hasForeignKey tableName (cdr referenceTable)))));;Repeat for the next reference
-            (t nil));;Table hasn't been referenced
+            (t nil)));;Table hasn't been referenced
 
 (defun checkForeignKeys (references command tableTable )
 ;;Checks if all of the foreignKeys in the command are valid
@@ -412,13 +412,19 @@
 )
 
 
+(defun evalProcedureError (error dataBase)
+    (print error)
+    (readFromUser dataBase)
+)
+
+
 (defun evaluateProcedure (command dataBase)
 ;;Evaluates an stored command with data provided by the user
   (cond ((procedureExists (car command) (caddr dataBase))
         (cond ((eq (list-length (cdr command)) (list-length (cadr (returnProcedure (car command) (caddr dataBase))))  )
-                (functSelect (replaceParams (cadr (returnProcedure (car command) (caddr dataBase))) (cdr command) (cddr (returnProcedure (car command) (caddr dataBase)))))) 
-            (t (ProcedureError "Not enough paramaters provided" dataBase))))
-    (t (ProcedureError "Requested Function doesn't exist" dataBase)))
+                (functSelect (replaceParams (cadr (returnProcedure (car command) (caddr dataBase))) (cdr command) (cddr (returnProcedure (car command) (caddr dataBase)))) dataBase)) 
+            (t (evalProcedureError "Not enough paramaters provided" dataBase))))
+    (t (evalProcedureError "Requested Function doesn't exist" dataBase)))
 )
 
 
@@ -432,8 +438,8 @@
            ((or (string-equal (car command) "ud")   (string-equal (car command) "update"))          (readFromUser (recordModifier   (cdr command) dataBase)))
            ((or (string-equal (car command) "rr")   (string-equal (car command) "remover"))         (readFromUser (recordDeleter    (cdr command) dataBase)))
            ((or (string-equal (car command) "dt")   (string-equal (car command) "deltable"))        (readFromUser (tableDeleter     (cdr command) dataBase)))
-           ((string-equal (car command) "cproc")                                                    (readFromUser (createProcedure  (cdr command) dataBase))
-           ((string-equal (car command) "eval")                                                     (print "Se leyó eval"))
+           ((string-equal (car command) "cproc")                                                    (readFromUser (createProcedure  (cdr command) dataBase)))
+           ((string-equal (car command) "eval")                                                     (evaluateProcedure (cdr command) dataBase))
            ((string-equal (car command) "query")                                                    (readFromUser (query (cdr command) dataBase)))
            ((string-equal (car command) "showall")                                                  (print "Mostrando toda la DB"))
            (t (progn (print "Unknown command") (readFromUser dataBase)))))
@@ -498,4 +504,10 @@
       (format t "~%")
      (functSelect (my-read) dataBase))
 
-(readFromUser '(NIL NIL NIL)   )
+(readFromUser '(((("institution" "id" "name" "location"))
+  (("person" "id" "name" "lastname" "gender")))
+ NIL
+ (("InsertInstitution" ("ident" "loc" "n") "insert" "institution"
+   ("id" "name" "location") "ident" "n" "loc")
+  ("AddPerson" ("ced" "gen" "n" "lastn") "insert" "person"
+   ("id" "name" "lastname" "gender") "ced" "n" "lastn" "gen")))   )
