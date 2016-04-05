@@ -369,24 +369,58 @@
       (cond (t dataBase))))
 
 
-(defun procedureExists (procedureName procedureTable)
-;; Checks if the name of the procedure has already been used
-           (cond ((> (list-length procedureTable) 0)
-               (cond ((string-equal procedureName (caaar procedureTable))  t);;Table name already used
-                     (t (procedureExists procedureName (cdr procedureTable)))))    ;;Checks for the next table in the procedureTable
-           (t nil)));;procedureTable is empty, procedureName doesn't exist
-
-
-(defun createProcedureError (error dataBase)
+(defun ProcedureError (error dataBase)
     (print error)
     (cond (t dataBase))
 )
 
-(defun createProcedure (command dataBase) 
-    (cond ((procedureExists (car command) (caddr dataBase))
-          (append (list (car dataBase)) (list (cadr dataBase))  (list (append (caddr dataBase) command))  ))
-      (t (createProcedureError "Function name already used")))
+(defun procedureExists (procedureName procedureTable)
+;; Checks if the name of the procedure has already been used
+           (cond ((> (list-length procedureTable) 0)
+               (cond ((string-equal procedureName (caar procedureTable))  t);;Table name already used
+                     (t (procedureExists procedureName (cdr procedureTable)))))    ;;Checks for the next table in the procedureTable
+           (t nil)));;procedureTable is empty, procedureName doesn't exist
+
+
+(defun returnProcedure (procedureName procedureTable)
+;;Returns a specific procedure, existance of the table has already been proved
+      (cond ((string-equal procedureName (caar procedureTable))   (car procedureTable));;Procedure name found
+            (t (returnProcedure procedureName (cdr procedureTable)))))  ;;Checks for the next table in the DB;;dataBase is empty, table doesn't exist
+
+(defun createProcedure (command dataBase)
+;;Stores a procedure in the database
+    (cond ((not (procedureExists (car command) (caddr dataBase)))
+          (append (list (car dataBase)) (list (cadr dataBase))  (list (append (caddr dataBase) (list command)))  ))
+      (t (ProcedureError "Function name already used" dataBase)))
 )
+
+(defun replaceOneParam (oldCommand paramName newData newCommand)
+;;Takes a command where all appearances of paramName will be changed by newData
+  (cond ((not (eq 0 (list-length oldCommand)))
+          (cond ((stringp (car oldCommand))
+                  (cond ((string-equal paramName (car oldCommand))
+                           (replaceOneParam (cdr oldCommand) paramName newData  (append  newCommand  (list newData))))
+                         (t (replaceOneParam (cdr oldCommand) paramName newData (append  newCommand  (list (car oldCommand)))))))
+                 (t (replaceOneParam (cdr oldCommand) paramName newData  (append  newCommand  (list (replaceOneParam (car oldCommand) paramName newData '())))) )))
+      (newCommand)))
+
+(defun replaceParams (dataToReplace newData command)
+;;Takes a list of columnNames, data to replace them with and a command where the changes will be executed
+  (cond ((not (eq 0 (list-length dataToReplace)))
+          (replaceParams (cdr dataToReplace) (cdr newData) (replaceOneParam command (car dataToReplace) (car newData) '()) ))
+      (t command))
+)
+
+
+(defun evaluateProcedure (command dataBase)
+;;Evaluates an stored command with data provided by the user
+  (cond ((procedureExists (car command) (caddr dataBase))
+        (cond ((eq (list-length (cdr command)) (list-length (cadr (returnProcedure (car command) (caddr dataBase))))  )
+                (functSelect (replaceParams (cadr (returnProcedure (car command) (caddr dataBase))) (cdr command) (cddr (returnProcedure (car command) (caddr dataBase)))))) 
+            (t (ProcedureError "Not enough paramaters provided" dataBase))))
+    (t (ProcedureError "Requested Function doesn't exist" dataBase)))
+)
+
 
 
 (defun functSelect (command dataBase)
